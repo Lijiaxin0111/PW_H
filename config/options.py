@@ -31,12 +31,12 @@ parser.add_argument('--train-iters', type=int, default=None,
 # device settings
 
 parser.add_argument('--gpu_num', type=int, default=1)
-parser.add_argument('--gpu_id', type=str, default='0,1,2,3')
+parser.add_argument('--gpu_id', type=str, default='7')
 
 # training options
 parser.add_argument('--composed', type=bool, default= True)
 parser.add_argument('--distributed', default=False, type=bool)
-parser.add_argument('--aux', type=bool, default= True)
+parser.add_argument('--aux', type=bool, default= False)
 
 parser.add_argument("--load_emb", dest='load_emb', action='store_true')
 parser.add_argument("--load_pair_store", dest='load_pair_store', action='store_true')
@@ -68,6 +68,8 @@ parser.add_argument('--clear_visualizer', dest='clear_visualizer', action='store
 parser.add_argument('--std_log', dest='std_log', action='store_true')
 parser.add_argument('--valid_per_epoch', type=int, default=4)
 parser.add_argument('--split', type=str, default="valid")
+
+parser.add_argument('--mod', type=str, default="Pure")
 
 # datasets
 

@@ -25,11 +25,15 @@ def make_path():
 
 """ ==================== Models ======================== """
 
-def save_model(model):
+def save_model(model,current = False):
     save_path = make_path()
     if not os.path.isdir(os.path.join(config['checkpoint_base'], save_path)):
         os.makedirs(os.path.join(config['checkpoint_base'], save_path), exist_ok=True)
-    model_name = os.path.join(config['checkpoint_base'], save_path, 'best_lr={}.pt'.format(opts.lr))
+    if current:
+        model_name = os.path.join(config['checkpoint_base'], save_path, 'current_lr={}.pt'.format(opts.lr))
+    else:
+        model_name = os.path.join(config['checkpoint_base'], save_path, 'best_lr={}.pt'.format(opts.lr))
+
     torch.save(model.state_dict(), model_name)
 
 
