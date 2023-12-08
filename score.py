@@ -6,38 +6,98 @@ import torch
 
 
 #  gt输入map
+
+
 def auc_judd(gt, pred):
     """Calculate AUC-Judd."""
-    gt = gt.detach().cpu().numpy()
-    pred = pred.detach().cpu().numpy()
+    pred = pred.view(-1).detach().cpu()
+    gt = gt.view(-1).detach().cpu()
 
-    thres = 0.6 * gt.max()
+    thres_gt = gt.sort()[0][int(0.8 * len(gt))]
+    thres_sal = pred.sort()[0][int(0.8 * len(pred))]
 
 
     # gt = gt.view(-1)
     # thres = gt.sort()[len(gt())]
+    gt_flat = (gt > thres_gt).flatten()
+    pred_flat = (pred >thres_sal).flatten()
 
-
-    gt_flat = (gt > thres).flatten()
-    pred_flat = (pred > thres).flatten()
 
     auc_judd_score = metrics.roc_auc_score(gt_flat, pred_flat)
     return auc_judd_score
 
 #  gt输入map
-def sAUC(gt, pred):
+def sAUC( fixationMap,saliencyMap, otherMap, Nsplits=100, stepSize=0.1, toPlot=False):
     """Calculate shuffled AUC."""
-    gt = gt.detach().cpu().numpy()
-    pred = pred.detach().cpu().numpy()
-    n_pixels = gt.size
-
-    idx = np.random.permutation(n_pixels)
-    gt_shuffled = (gt).flatten()[idx]
-
-    thres = 0.6 * gt_shuffled.max()
+    fixationMap = fixationMap.view(-1).detach().cpu().numpy()
+    saliencyMap= saliencyMap.view(-1).detach().cpu().numpy()
+    otherMap=  otherMap.view(-1).detach().cpu().numpy()
     
-    s_auc_score = metrics.roc_auc_score(gt_shuffled > thres, (pred.flatten()[idx])> thres).flatten()
-    return s_auc_score
+    # saliencyMap is the saliency map
+    # fixationMap is the human fixation map (binary matrix)
+    # otherMap is a binary fixation map (like fixationMap) by taking the union of
+    # fixations from M other random images (Borji uses M=10)
+    # Nsplits is the number of random splits
+    # stepSize is for sweeping through the saliency map
+    # if toPlot=True, displays ROC curve
+
+    if saliencyMap.shape != fixationMap.shape:
+        saliencyMap = cv2.resize(saliencyMap, (fixationMap.shape[1], fixationMap.shape[0]))
+    
+
+    # # normalize saliency map
+    saliencyMap = (saliencyMap - np.min(saliencyMap)) / (np.max(saliencyMap) - np.min(saliencyMap))
+
+    if np.isnan(saliencyMap).all():
+        print('NaN saliencyMap')
+        return np.nan
+
+    S = saliencyMap.flatten()
+    F = fixationMap.flatten()
+    Oth = otherMap.flatten()
+
+    Sth = S[F > 0]  # sal map values at fixation locations
+    Nfixations = len(Sth)
+
+    # for each fixation, sample Nsplits values from the sal map at locations
+    # specified by otherMap
+
+    ind = np.where(Oth > 0)[0]  # find fixation locations on other images
+
+    Nfixations_oth = min(Nfixations, len(ind))
+    randfix = np.zeros((Nfixations_oth, Nsplits))
+
+    for i in range(Nsplits):
+        randind = np.random.permutation(ind)  # randomize choice of fixation locations
+        randfix[:, i] = S[randind[:Nfixations_oth]]  # sal map values at random fixation locations of other random images
+
+    # calculate AUC per random split (set of random locations)
+    auc = np.zeros(Nsplits)
+    for s in range(Nsplits):
+        curfix = randfix[:, s]
+
+        allthreshes = np.flipud(np.arange(0, np.maximum(np.max(Sth), np.max(curfix)) + stepSize, stepSize))
+        tp = np.zeros(len(allthreshes) + 2)
+        fp = np.zeros(len(allthreshes) + 2)
+        tp[0] = 0
+        tp[-1] = 1
+        fp[0] = 0
+        fp[-1] = 1
+
+        for i in range(len(allthreshes)):
+            thresh = allthreshes[i]
+            tp[i + 1] = np.sum(Sth >= thresh) / Nfixations
+            fp[i + 1] = np.sum(curfix >= thresh) / Nfixations_oth
+
+        auc[s] = np.trapz(fp, tp)
+
+    score = np.mean(auc)  # mean across random splits
+
+    return  score
+
+
+
+
 
 #  gt输入map
 def cc(gt, pred):

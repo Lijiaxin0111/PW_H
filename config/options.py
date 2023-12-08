@@ -31,7 +31,7 @@ parser.add_argument('--train-iters', type=int, default=None,
 # device settings
 
 parser.add_argument('--gpu_num', type=int, default=1)
-parser.add_argument('--gpu_id', type=str, default='7')
+parser.add_argument('--gpu_id', type=str, default='6')
 
 # training options
 parser.add_argument('--composed', type=bool, default= True)

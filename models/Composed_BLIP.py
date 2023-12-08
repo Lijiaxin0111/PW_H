@@ -1,13 +1,3 @@
-'''
-@File       :   ImageReward.py
-@Time       :   2023/01/28 19:53:00
-@Auther     :   Jiazheng Xu
-@Contact    :   xjz22@mails.tsinghua.edu.cn
-@Description:   ImageReward Reward model.
-* Based on CLIP code base and improved-aesthetic-predictor code base
-* https://github.com/openai/CLIP
-* https://github.com/christophschuhmann/improved-aesthetic-predictor
-'''
 
 import os
 import torch
@@ -39,6 +29,9 @@ def _transform(n_px):
         ToTensor(),
         # Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
     ])
+
+
+
 
 # Modified MSE Loss Function
 class ModMSELoss(torch.nn.Module):
@@ -212,6 +205,8 @@ class MLNet(nn.Module):
 
         # dot product with prior
         x = x * upscaled_prior
+
+        
         x = torch.nn.functional.relu(x,inplace=True)
         x = self.bilinearup_result(x)
         return x
@@ -249,6 +244,7 @@ class TXT_MLNet(nn.Module):
 
         self.CA_1 = CorssAttention()
         self.CA_2 = CorssAttention()
+    
         
         
     def forward(self, x, txt_feature):
@@ -258,11 +254,12 @@ class TXT_MLNet(nn.Module):
             x = model(x)
             if ii in {16,23,29}:
                 results.append(x)
-                
+
+      
         
         # concat to get 1280 = 512 + 512 + 256
 
-        x = torch.cat(( (self.CA_1( results[0], txt_feature)),results[1], self.CA_1( results[2], txt_feature)),1) 
+        x = torch.cat(( (results[0]),self.CA_1(results[1], txt_feature),( results[2])),1)
     
         # adding dropout layer with dropout set to 0.5 (default)
         x = self.fddropout(x)
@@ -273,18 +270,26 @@ class TXT_MLNet(nn.Module):
         # 1*1 convolution layer
         x = self.pre_final_conv(x)
         # print("x shape:{}".format(x.shape))
+        # print(txt_feature[:, :729].shape)
+    
         
-        upscaled_prior = self.bilinearup(self.prior).repeat(txt_feature.shape[0],1, 1,1)
+        upscaled_prior = self.bilinearup(self.prior).repeat(txt_feature.shape[0],1,1,1)
+
+
         # print ("upscaled_prior shape: {}".format(upscaled_prior.shape))
+        # print(txt_feature.shape)
+
         # upscaled_prior = self.CA_2(upscaled_prior, txt_feature)
 
 
         # dot product with prior
         x = x * upscaled_prior
 
+        # x = self.CA_2(x,txt_feature)
+
         x = torch.nn.functional.relu(x,inplace=True)
 
-        # x = self.CA_2(x,txt_feature)
+
 
         x = self.bilinearup_result(x)
         upscaled_prior = (upscaled_prior, txt_feature)
@@ -296,19 +301,7 @@ class TXT_MLNet(nn.Module):
 
 
 
-
-
-
-        
-
-
-
-
-
-
-
-
-class ImageReward(nn.Module):
+class Compose_MLNet(nn.Module):
     def __init__(self, med_config, device='cpu',last_freeze_layer = 20,mode=  "Pure_MLNet"):
         super().__init__()
         self.device = device
@@ -472,4 +465,5 @@ class ImageReward(nn.Module):
         
         # print(gt["gt_fix"])
         # print(output["pred_map"])
+        # print(inputs)
         return output, gt

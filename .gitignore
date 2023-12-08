@@ -3,3 +3,9 @@
 **/checkpoint/**
 
 **/visualization/**
+
+*.png
+
+*.pyc
+
+**/__pycache__/**

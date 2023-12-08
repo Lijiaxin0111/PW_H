@@ -7,7 +7,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
 opts.BatchSize = opts.batch_size * opts.accumulation_steps * opts.gpu_num
 
 
-from models.Composed_BLIP import ImageReward,ModMSELoss
+from models.Composed_BLIP import Compose_MLNet,ModMSELoss
 
 import torch
 from torch.utils.data import DataLoader
@@ -17,7 +17,7 @@ from torch.backends import cudnn
 
 from dataset.AGIQA_2023 import AGIQA_2023
 from dataset.AGIQA_3k import AGIQA_3k
-from dataset.dataset import SJTU_TIS_whole,SJTU_TIS_0,SJTU_TIS_1,SJTU_TIS_2,SJTU_TIS_3,MIT
+from dataset.dataset import SJTU_TIS_whole,SJTU_TIS_0,SJTU_TIS_1,SJTU_TIS_2,SJTU_TIS_3,MIT ,SJTU_all
 from tqdm import *
 from correlation import get_correlation_Coefficient
 import sys
@@ -26,6 +26,8 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 from score import auc_judd,nss,cc,sAUC
 from torchvision.transforms import ToPILImage
+
+
 
 def std_log():
     if get_rank() == 0:
@@ -65,6 +67,11 @@ if __name__ == "__main__":
     writer = visualizer()
     print("dataset:", opts.dataset, " aux:", opts.aux)
     print("distribed", opts.distributed)
+
+    if opts.dataset == "all":
+        train_dataset = SJTU_all(split="train")
+        test_dataset = SJTU_all(split="test")
+        valid_dataset = SJTU_all(split="valid")
 
 
     if opts.dataset == "whole":
@@ -128,13 +135,11 @@ if __name__ == "__main__":
     print("steps_per_valid = ", steps_per_valid)
 
     if opts.mod == "Pure":
-        model = ImageReward(device= device,med_config=r"config/med_config.json")
+        model = Compose_MLNet(device= device,med_config=r"config/med_config.json")
     else:
-        model = ImageReward(device= device,med_config=r"config/med_config.json",mode= "Mix_TXT")
+        model = Compose_MLNet(device= device,med_config=r"config/med_config.json",mode= "Mix_TXT")
 
-
-    
-    print("model: Imagereward")
+    print("model: Compose_MLNet")
 
     if opts.preload_path:
         model = preload_model(model)
@@ -200,7 +205,7 @@ if __name__ == "__main__":
 
                 output_max = torch.max(torch.max(output["pred_map"],2)[0],2)[0].unsqueeze(2).unsqueeze(2).expand(output["pred_map"].shape[0],output["pred_map"].shape[1],240,240)
                 auc_j_score = auc_judd(gt["gt_map"],output["pred_map"]/ output_max)
-                sauc_score = sAUC(gt["gt_map"],output["pred_map"] / output_max)
+                sauc_score = sAUC(gt["gt_map"],output["pred_map"] / output_max,gt["gt_fix"])
                 cc_score = cc(gt["gt_map"],output["pred_map"] / output_max)
                 nss_score = nss(gt["gt_fix"],output["pred_map"] / output_max)
 
@@ -249,9 +254,10 @@ if __name__ == "__main__":
                 # print("finished")
                 iterations = epoch * len(train_loader) + step + 1
                 train_iteration = iterations / opts.accumulation_steps
+                
 
                 print(' Train Loss %6.5f | auc_j_score %6.5f | sauc_score %6.5f | cc_score %6.5f | nss_score %6.5f' 
-                    % ( ( (loss)) ,auc_j_score,sauc_score,cc_score,nss_score))
+                    % ( ( (loss)) ,auc_j_score, sauc_score ,cc_score,nss_score))
 
                 
                 # update parameters of net
@@ -297,19 +303,19 @@ if __name__ == "__main__":
                         output_max = torch.max(torch.max(output["pred_map"],2)[0],2)[0].unsqueeze(2).unsqueeze(2).expand(output["pred_map"].shape[0],output["pred_map"].shape[1],240,240)
                      
                         auc_j_score = auc_judd(gt["gt_map"],output["pred_map"]/ output_max)
-                        sauc_score = sAUC(gt["gt_map"],output["pred_map"] / output_max)
+                        sauc_score = sAUC(gt["gt_map"],output["pred_map"] / output_max, gt["gt_fix"])
                         cc_score = cc(gt["gt_map"],output["pred_map"] / output_max)
                         nss_score = nss(gt["gt_fix"],output["pred_map"] / output_max)
      
                         writer.add_scalar('Validation-Loss', torch.mean(torch.tensor(valid_loss)), global_step=train_iteration)
                             
                         writer.add_scalar('auc_j_score',  auc_j_score, global_step=train_iteration)
-                        writer.add_scalar('sauc_score',  sauc_score, global_step=train_iteration)
+                        writer.add_scalar(' sauc_score',   sauc_score, global_step=train_iteration)
                         writer.add_scalar('cc_score',  cc_score, global_step=train_iteration)
                         writer.add_scalar('nss_score',  nss_score, global_step=train_iteration)
 
             
-                        print(' Valid Loss %6.5f | auc_j_score %6.5f | sauc_score %6.5f | cc_score %6.5f | nss_score %6.5f' 
+                        print(' Valid Loss %6.5f | auc_j_score %6.5f |  sauc_score %6.5f | cc_score %6.5f | nss_score %6.5f' 
                             % ( torch.mean( torch.mean(torch.tensor(valid_loss))) ,auc_j_score,sauc_score,cc_score,nss_score)  )
 
 
@@ -345,13 +351,11 @@ if __name__ == "__main__":
 
         test_loss = []
         auc_j_score_l = []
-        sauc_score_l = []
+        pred_score_l = []
         cc_score_l = []
         nss_score_l = []
 
 
-
-        
    
 
 
@@ -364,11 +368,11 @@ if __name__ == "__main__":
                 output_max = torch.max(torch.max(output["pred_map"],2)[0],2)[0].unsqueeze(2).unsqueeze(2).expand(output["pred_map"].shape[0],output["pred_map"].shape[1],240,240)
 
                 auc_j_score = auc_judd(gt["gt_map"],output["pred_map"]/ output_max)
-                sauc_score = sAUC(gt["gt_map"],output["pred_map"]/ output_max)
+                sauc_score = sAUC(gt["gt_map"],output["pred_map"]/ output_max,gt["gt_fix"])
                 cc_score = cc(gt["gt_map"],output["pred_map"]/ output_max)
-                nss_score = nss(gt["gt_map"],output["pred_map"]/ output_max)
+                nss_score = nss(gt["gt_fix"],output["pred_map"]/ output_max)
                 auc_j_score_l.append(auc_j_score)
-                sauc_score_l.append(sauc_score)
+                pred_score_l.append(sauc_score)
                 cc_score_l.append(cc_score)
                 nss_score_l.append(nss_score)
 
@@ -377,19 +381,20 @@ if __name__ == "__main__":
 
                 gt_image_map =  ToPILImage()(gt["gt_map"][0])
                 pred_image_map =  ToPILImage()(output["pred_map"][0] / max_pred_mask)
+                init_image =  ToPILImage()(gt["image"][0])
 
 
 
                 gt_image_map.save("test_gt_image_map.png")
                 pred_image_map.save("test_pred_image_map.png")
-
+                init_image.save("test_init_map.png") 
 
                 
 
      
        
-                print(' Test Loss %6.5f | auc_j_score %6.5f | sauc_score %6.5f | cc_score %6.5f | nss_score %6.5f' 
-                    % ( torch.mean(torch.tensor(test_loss)) ,torch.mean(torch.tensor(auc_j_score_l)),torch.mean(torch.tensor(sauc_score_l)),torch.mean(torch.tensor(cc_score_l)),torch.mean(torch.tensor(nss_score_l))  )   )
+                print(' Test Loss %6.5f | auc_j_score %6.5f | pred_score %6.5f | cc_score %6.5f | nss_score %6.5f' 
+                    % ( torch.mean(torch.tensor(test_loss)) ,torch.mean(torch.tensor(auc_j_score_l)),torch.mean(torch.tensor(pred_score_l)),torch.mean(torch.tensor(cc_score_l)),torch.mean(torch.tensor(nss_score_l))  )   )
 
 
 
