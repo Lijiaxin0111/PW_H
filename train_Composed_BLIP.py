@@ -6,7 +6,6 @@ from config.learning_rates import get_learning_rate_scheduler
 os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
 opts.BatchSize = opts.batch_size * opts.accumulation_steps * opts.gpu_num
 
-
 from models.Composed_BLIP import Composed_BLIP
 
 import torch
@@ -17,7 +16,6 @@ import torch.nn.functional as F
 from dataset.AGIQA_2023 import AGIQA_2023
 import sys
 
-
 def std_log():
     if get_rank() == 0:
         save_path = make_path()
@@ -25,7 +23,6 @@ def std_log():
         sys.stdout = open(os.path.join(config['log_base'], "{}.txt".format(save_path)), "w")
 
     
-
 def init_seeds(seed, cuda_deterministic=True):
     torch.manual_seed(seed)
     if cuda_deterministic:  # slower, more reproducible
